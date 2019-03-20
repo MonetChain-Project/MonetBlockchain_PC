@@ -1,0 +1,82 @@
+import { Injectable } from '@angular/core';
+import { Http } from '@angular/http';
+import { BehaviorSubject } from 'rxjs';
+import { DefaultProvider } from '../../providers/default/default';
+import { Logger } from '../../providers/logger/logger';
+
+import * as _ from 'lodash';
+
+export interface ChainNetwork {
+  chain: string;
+  network: string;
+}
+export interface NetworkSettings {
+  availableNetworks: ChainNetwork[];
+  selectedNetwork: ChainNetwork;
+}
+
+@Injectable()
+export class ApiProvider {
+  public networkSettings = new BehaviorSubject<NetworkSettings>({
+    availableNetworks: [{ chain: 'XVG', network: 'mainnet' }],
+    selectedNetwork: { chain: 'XVG', network: 'mainnet' }
+  });
+
+  public ratesAPI = {
+    btc: 'https://bitpay.com/api/rates',
+    bch: 'https://bitpay.com/api/rates/bch'
+  };
+
+  constructor(
+    public http: Http,
+    private defaults: DefaultProvider,
+    private logger: Logger
+  ) {
+    this.getAvailableNetworks().subscribe(data => {
+      const availableNetworks = data.json() as ChainNetwork[];
+      this.networkSettings.next({
+        availableNetworks,
+        selectedNetwork: this.networkSettings.value.selectedNetwork
+      });
+    });
+  }
+
+  public getAvailableNetworks() {
+    return this.http.get(this.getUrlPrefix() + '/status/enabled-chains');
+  }
+
+  public getUrlPrefix(): string {
+    const prefix: string = this.defaults.getDefault('%API_PREFIX%');
+    return prefix;
+  }
+  public getUrl(): string {
+    const prefix: string = this.defaults.getDefault('%API_PREFIX%');
+    const chain: string = this.networkSettings.value.selectedNetwork.chain;
+    const network: string = this.networkSettings.value.selectedNetwork.network;
+    const apiPrefix = `${prefix}/${chain}/${network}`;
+    return apiPrefix;
+  }
+
+  public getConfig(): ChainNetwork {
+    const config = {
+      chain: this.networkSettings.value.selectedNetwork.chain,
+      network: this.networkSettings.value.selectedNetwork.network
+    };
+    return config;
+  }
+
+  public changeNetwork(network: ChainNetwork): void {
+    const availableNetworks = this.networkSettings.value.availableNetworks;
+    const isValid = _.some(availableNetworks, network);
+    if (!isValid) {
+      this.logger.error(
+        'Invalid URL: missing or invalid COIN or NETWORK param'
+      );
+      return;
+    }
+    this.networkSettings.next({
+      availableNetworks,
+      selectedNetwork: network
+    });
+  }
+}
